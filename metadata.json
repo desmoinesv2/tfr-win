@@ -1,0 +1,5 @@
+{
+  "name": "Chibify 风格转换器",
+  "description": "使用 Gemini 2.5 将动漫角色转化为酷炫的墨镜 Q 版风格。",
+  "requestFramePermissions": []
+}
