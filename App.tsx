@@ -5,10 +5,44 @@ import { UploadIcon, MagicIcon, DownloadIcon, AlertCircle, ArrowRight } from './
 import { Spinner } from './components/Spinner';
 
 // Prompt for when both Style and Content images are present
-const PROMPT_WITH_STYLE = "参考第一张图片的艺术风格（包括线条风格、上色方式、Q版比例），将第二张图片中的人物重新绘制为一个贴纸。保持人物的原始发色、发型和服装特征，但将其转化为参考图中的Q版/Chibi风格。确保人物佩戴酷酷的黑色墨镜，表情自信微笑。使用极简矢量艺术风格，粗线条，平涂上色。白色背景。";
+const PROMPT_WITH_STYLE = `任务：图像生成。
+
+输入包含两张图片：
+1. 第一张图是【风格参考图】(Style Reference)
+2. 第二张图是【人物原型图】(Character Content)
+
+请生成一张新的Q版人物贴纸，必须严格遵守以下指令：
+
+1. **内容（发型与服装）必须来自第二张图**：
+   - 仔细观察第二张图（人物原型图）的**发型**（刘海、长短、颜色）和**服装**（款式、颜色）。
+   - **生成的图片必须完全复制第二张图的发型和衣服**。
+   - **严禁**使用第一张图的发型或衣服。第一张图仅供参考画风，绝不可参考其内容。
+
+2. **风格必须来自第一张图**：
+   - 学习第一张图的绘画风格（线条粗细、Q版头身比例、上色质感）。
+   - 只模仿画风，不要模仿内容。
+
+3. **固定特征**：
+   - 人物必须佩戴**纯黑色墨镜**。
+   - 墨镜镜片必须是纯黑色块，**绝对不可有反光**，不可有高光，不可有倒影。
+   - 表情自信微笑。
+   - 白色背景。
+
+**总结：用图1的画风，画图2的人（保留图2的发型和衣服）。**`;
 
 // Prompt for when only Content image is present
-const PROMPT_SINGLE = "将这张图片中的人物重新绘制为一个Q版/Chibi风格的贴纸。保持人物的原始发色、发型和服装特征。确保人物佩戴酷酷的黑色墨镜，表情自信微笑。使用极简矢量艺术风格，粗线条，平涂上色。白色背景。";
+const PROMPT_SINGLE = `任务：图像生成。
+
+基于提供的人物图片，创作一个Q版风格贴纸。
+
+执行步骤：
+1. **分析人物**：识别图片中人物的发型、发色和服装特征。
+2. **重绘**：在保持上述人物特征（**特别是发型**）的前提下，将其重绘为Q版风格。
+3. **风格要求**：极简矢量插画，粗线条，平涂上色。
+4. **配饰要求**：
+   - 必须佩戴**纯黑色墨镜**。
+   - 墨镜必须完全无反光、无高光、无渐变，呈现纯黑平面风格。
+5. **输出规格**：白色背景，自信微笑表情。`;
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
@@ -66,8 +100,13 @@ const App: React.FC = () => {
     setStatus(AppStatus.GENERATING);
     setErrorMsg(null);
 
+    // Determine prompt based on images present at runtime to ensure sync
+    const currentPrompt = styleImage ? PROMPT_WITH_STYLE : PROMPT_SINGLE;
+    // Update state to match (optional, mainly for UI if we showed the prompt)
+    setPrompt(currentPrompt);
+
     try {
-      const generatedImg = await generateChibiStyle(contentImage, styleImage, prompt);
+      const generatedImg = await generateChibiStyle(contentImage, styleImage, currentPrompt);
       setResultImage(generatedImg);
       setStatus(AppStatus.SUCCESS);
     } catch (err: any) {
@@ -156,7 +195,7 @@ const App: React.FC = () => {
                       alt="Style Reference" 
                       className="w-full h-full object-contain opacity-80"
                     />
-                    <div className="absolute top-2 left-2 bg-indigo-600/90 text-white text-xs px-2 py-1 rounded">风格参考</div>
+                    <div className="absolute top-2 left-2 bg-indigo-600/90 text-white text-xs px-2 py-1 rounded">风格参考 (Style)</div>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -202,7 +241,7 @@ const App: React.FC = () => {
                       alt="Original" 
                       className="w-full h-full object-contain"
                     />
-                     <div className="absolute top-2 left-2 bg-indigo-600/90 text-white text-xs px-2 py-1 rounded">人物原图</div>
+                     <div className="absolute top-2 left-2 bg-indigo-600/90 text-white text-xs px-2 py-1 rounded">人物原图 (Content)</div>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -233,13 +272,14 @@ const App: React.FC = () => {
                   风格描述 (Prompt)
                 </label>
                 <textarea 
-                  value={prompt}
+                  value={styleImage ? PROMPT_WITH_STYLE : PROMPT_SINGLE}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="w-full h-28 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none"
+                  className="w-full h-40 bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none font-mono"
                   placeholder="描述你想要生成的风格..."
+                  readOnly={true} 
                 />
                  <p className="text-xs text-slate-500 mt-2">
-                   {styleImage ? "提示词已针对双图（风格参考+原图）模式优化。" : "提示词已针对单图（原图）模式优化。"}
+                   {styleImage ? "提示词：强制使用图2的发型和衣服，参考图1画风。" : "提示词：基于原图进行Q版重绘。"}
                 </p>
               </div>
 

@@ -21,13 +21,13 @@ export const generateChibiStyle = async (
   customPrompt: string
 ): Promise<string> => {
   const ai = getClient();
-  const model = "gemini-2.5-flash-image"; // Optimized for general image tasks including editing/transformation
+  // Using gemini-2.5-flash-image for image generation tasks
+  const model = "gemini-2.5-flash-image"; 
 
   try {
     const parts: any[] = [];
 
-    // Order matters: Providing images first often helps the model understand context before instruction.
-    
+    // Order: Images first, then text prompt.
     // 1. Style Reference (if provided)
     if (styleImage) {
       parts.push({
@@ -54,31 +54,48 @@ export const generateChibiStyle = async (
       contents: {
         parts: parts
       },
-      // Note: responseMimeType is not supported for nano banana series (flash-image)
+      // Note: responseMimeType is not supported for nano banana series
     });
 
-    // Parse response for image
-    if (response.candidates && response.candidates.length > 0) {
-      const parts = response.candidates[0].content.parts;
-      
-      // First check for image
-      for (const part of parts) {
+    const candidate = response.candidates?.[0];
+    if (!candidate) {
+         throw new Error("API 响应为空，未返回任何候选结果。");
+    }
+
+    // Check for safety finish reason if no content or just to be safe
+    if (candidate.finishReason === 'SAFETY') {
+        throw new Error("由于安全策略，模型拒绝生成该图片。请尝试更换图片。");
+    }
+
+    const contentParts = candidate.content?.parts;
+    if (contentParts) {
+      // Prioritize finding the image
+      for (const part of contentParts) {
         if (part.inlineData && part.inlineData.data) {
           return `data:image/png;base64,${part.inlineData.data}`;
         }
       }
       
-      // If no image found, check for text (refusal or explanation)
-      const textPart = parts.find(p => p.text);
+      // If no image, check for text message
+      const textPart = contentParts.find(p => p.text);
       if (textPart && textPart.text) {
-         throw new Error(`模型未生成图片，返回信息: ${textPart.text}`);
+         let msg = textPart.text.trim();
+         // Clean up if it's just empty code blocks which can happen on soft refusals
+         if (msg.replace(/`/g, '').trim().length === 0) {
+             msg = "模型未生成图片。这通常是因为输入图片触发了安全过滤或过于复杂。";
+         }
+         throw new Error(`生成失败: ${msg}`);
       }
     }
 
-    throw new Error("未在响应中找到图片数据 (No image data found)。");
+    throw new Error("未在响应中找到图片数据，也未找到错误说明。");
 
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error(error.message || "图片生成失败。");
+    // Preserve our custom error messages
+    if (error.message && (error.message.includes("生成失败") || error.message.includes("安全策略"))) {
+        throw error;
+    }
+    throw new Error(error.message || "图片生成服务暂时不可用，请稍后再试。");
   }
 };
